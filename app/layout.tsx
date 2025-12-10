@@ -6,8 +6,11 @@ import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 const outfit = Outfit({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Lions' Minute Master",
-  description: "Automated AI Secretary for Lions Club Meetings",
+  title: "Lions' AI Secretary",
+  description: "Automated Meeting Minutes for Lions Club",
+  icons: {
+    icon: "/lions-icon.png",
+  },
 };
 
 export default function RootLayout({
