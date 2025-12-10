@@ -16,6 +16,17 @@ export interface MinutesEditorProps {
     initialMinutes: { item: string; description: string; remark: string }[];
 }
 
+/**
+ * Render a minutes editor paired with a transcript viewer, including save and DOCX export controls for a meeting.
+ *
+ * The component displays the provided transcript, allows editing of minutes (item, title, description, remark),
+ * persists edits to the backend with status "READY_FOR_REVIEW", and can request a DOCX export which is downloaded by the client.
+ *
+ * @param meetingId - Identifier of the meeting whose minutes are being edited.
+ * @param transcript - Array of transcript lines to display on the left pane; each line should include `speaker`, `text`, and `time`.
+ * @param initialMinutes - Initial minutes entries to populate the editor; each entry should include `item`, `description`, and `remark`.
+ * @returns A React element containing the transcript pane and editable minutes editor with save and export controls.
+ */
 export function MinutesEditor({ meetingId, transcript, initialMinutes }: MinutesEditorProps) {
     const [minutes, setMinutes] = useState(initialMinutes.map((m, i) => ({
         id: i,

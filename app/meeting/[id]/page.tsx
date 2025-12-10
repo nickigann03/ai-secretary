@@ -10,6 +10,16 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
+/**
+ * Page component that renders the meeting UI for a given meeting id.
+ *
+ * Renders loading and not-found states, displays meeting header, attendance controls (with persistence),
+ * an agenda editor (saved on blur), and conditionally shows the recorder, processing UI, or minutes editor
+ * based on the meeting's status.
+ *
+ * @param params - A promise resolving to an object with `id`; the `id` is used as the meeting identifier.
+ * @returns The meeting page JSX for the specified meeting id.
+ */
 export default function MeetingPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const meetingId = id as Id<"meetings">;
@@ -143,6 +153,13 @@ export default function MeetingPage({ params }: { params: Promise<{ id: string }
     );
 }
 
+/**
+ * Form for adding a temporary member to the meeting.
+ *
+ * Renders name and role inputs plus an "Add" button. Submitting with a non-empty name calls the meeting member creation mutation with `{ name, role, email: "" }` and clears the inputs; submission is ignored if the name is empty.
+ *
+ * @returns A JSX element containing the add-member form.
+ */
 function AddMemberForm() {
     const createMember = useMutation(api.meetings.createMember);
     const [name, setName] = useState("");

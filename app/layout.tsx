@@ -13,6 +13,12 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Top-level application layout that sets the HTML structure, applies the Outfit font and theme classes, and provides the Convex client context to descendants.
+ *
+ * @param children - React nodes to render inside the application layout
+ * @returns The root HTML element tree for the application
+ */
 export default function RootLayout({
   children,
 }: Readonly<{

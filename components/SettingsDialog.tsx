@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Trash, Plus, User, Activity } from "lucide-react";
 import { Id } from "../convex/_generated/dataModel";
 
+/**
+ * Render a full-screen modal containing application settings (System Status and Club Members) when open.
+ *
+ * @param isOpen - Controls whether the modal is visible.
+ * @param onClose - Callback invoked when the Close button is pressed.
+ * @returns The settings dialog element when `isOpen` is true, `null` otherwise.
+ */
 export function SettingsDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     if (!isOpen) return null;
 
@@ -28,6 +35,14 @@ export function SettingsDialog({ isOpen, onClose }: { isOpen: boolean; onClose: 
     );
 }
 
+/**
+ * Displays a system status panel with a control to trigger testing of API connections.
+ *
+ * Renders a header with a "Test API Connections" button and, when test results are available,
+ * two status panels showing Gladia (Speech-to-Text) and Gemini (AI Minutes) messages and pass/fail styling.
+ *
+ * @returns The component's rendered JSX: a header with the test control and per-service status panels when present.
+ */
 function ConnectionTester() {
     const testConnection = useAction(api.actions.testApiConnections);
     const [status, setStatus] = useState<any>(null);
@@ -72,6 +87,14 @@ function ConnectionTester() {
     )
 }
 
+/**
+ * Manage the club's member roster with UI for viewing, adding, and removing members.
+ *
+ * Fetches and displays current members, provides a form to add a new member (name and role),
+ * and allows removing a member after user confirmation.
+ *
+ * @returns A React element rendering the members manager interface.
+ */
 function MembersManager() {
     const members = useQuery(api.meetings.getMembers);
     const createMember = useMutation(api.meetings.createMember);
