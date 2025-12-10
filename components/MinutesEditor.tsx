@@ -4,36 +4,78 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
-import { Save, Download, FileText, CheckCircle } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Save, Download, FileText, CheckCircle, Loader2 } from "lucide-react";
+import { useAction, useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 
-// Mock Transcript Data
-const MOCK_TRANSCRIPT = [
-    { speaker: "President Lion Mary", text: "I call this meeting to order at 8:00 PM.", time: "00:00" },
-    { speaker: "Lion John (Secretary)", text: "Apologies have been received from Lion ET and Lion Sarah.", time: "00:15" },
-    { speaker: "President Lion Mary", text: "Thank you. Let's move to the confirmation of previous minutes.", time: "00:30" },
-    { speaker: "Lion ET", text: "I propose we accept the minutes as read.", time: "00:45" },
-    { speaker: "Lion EY", text: "I second that motion.", time: "00:50" },
-    { speaker: "President Lion Mary", text: "Minutes confirmed. Any matters arising?", time: "01:00" },
-];
+export interface MinutesEditorProps {
+    meetingId: Id<"meetings">;
+    transcript: { speaker: string; text: string; time: number }[];
+    initialMinutes: { item: string; description: string; remark: string }[];
+}
 
-// Mock Initial Minutes Data (AI Generated)
-const INITIAL_MINUTES = [
-    { id: 1, item: "1.0", title: "Call to Order", description: "The meeting was called to order by President Lion Mary at 8:00 PM.", remark: "Info" },
-    { id: 2, item: "2.0", title: "Apologies", description: "Apologies received from Lion ET and Lion Sarah.", remark: "Info" },
-    { id: 3, item: "3.0", title: "Confirmation of Minutes", description: "The minutes of the previous meeting were confirmed. Proposed by Lion ET, Seconded by Lion EY.", remark: "Info" },
-    { id: 4, item: "4.0", title: "Matters Arising", description: "No matters arising were discussed.", remark: "Info" },
-];
+export function MinutesEditor({ meetingId, transcript, initialMinutes }: MinutesEditorProps) {
+    const [minutes, setMinutes] = useState(initialMinutes.map((m, i) => ({
+        id: i,
+        item: m.item,
+        title: "", // Simplification as discussed
+        description: m.description,
+        remark: m.remark
+    })));
+    const [isExporting, setIsExporting] = useState(false);
 
-export function MinutesEditor() {
-    const [minutes, setMinutes] = useState(INITIAL_MINUTES);
+    const updateMinutes = useMutation(api.meetings.updateMinutes);
+    const exportMinutes = useAction(api.actions.exportMinutes);
 
     const handleUpdate = (id: number, field: string, value: string) => {
         setMinutes(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
     };
 
-    const handleExport = () => {
-        alert("Generating .docx file... (This would trigger the backend export)");
+    const handleSave = async () => {
+        // Map UI state back to schema
+        const schemaMinutes = minutes.map(m => ({
+            item: m.item,
+            description: m.description, // Collapsing title into description or ignoring it for now
+            remark: m.remark
+        }));
+
+        await updateMinutes({
+            meetingId,
+            minutes: schemaMinutes,
+            status: "READY_FOR_REVIEW" // Keep in review or move to finalized?
+        });
+        alert("Draft Saved!");
+    };
+
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            // First save recent changes
+            await handleSave();
+
+            // Call backend to generate DOCX
+            const base64 = await exportMinutes({ meetingId });
+
+            // Download Blob
+            const binaryString = window.atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+            const link = document.createElement("a");
+            link.href = window.URL.createObjectURL(blob);
+            link.download = `Lions_Minutes_${new Date().toISOString().slice(0, 10)}.docx`;
+            link.click();
+
+        } catch (error) {
+            console.error("Export failed", error);
+            alert("Failed to export.");
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     return (
@@ -46,7 +88,7 @@ export function MinutesEditor() {
                     </h3>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {MOCK_TRANSCRIPT.map((line, idx) => (
+                    {transcript.map((line, idx) => (
                         <div key={idx} className="bg-slate-50 p-3 rounded-lg text-sm border hover:border-primary/30 transition-colors cursor-pointer group">
                             <div className="flex justify-between mb-1">
                                 <span className="font-semibold text-primary/80 text-xs uppercase tracking-wider">{line.speaker}</span>
@@ -63,11 +105,12 @@ export function MinutesEditor() {
                 <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
                     <h3 className="font-semibold text-slate-700">Lions Club Minutes Template</h3>
                     <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="gap-2">
+                        <Button variant="outline" size="sm" className="gap-2" onClick={handleSave}>
                             <Save className="h-4 w-4" /> Save Draft
                         </Button>
-                        <Button size="sm" className="gap-2 bg-green-600 hover:bg-green-700 text-white" onClick={handleExport}>
-                            <Download className="h-4 w-4" /> Export to DOCX
+                        <Button size="sm" className="gap-2 bg-green-600 hover:bg-green-700 text-white" onClick={handleExport} disabled={isExporting}>
+                            {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                            {isExporting ? "Exporting..." : "Export to DOCX"}
                         </Button>
                     </div>
                 </div>
@@ -90,6 +133,7 @@ export function MinutesEditor() {
                                         <Input
                                             className="mb-2 font-semibold border-none px-0 h-auto focus-visible:ring-0 text-slate-800 text-lg"
                                             value={item.title}
+                                            placeholder="Title (Optional)"
                                             onChange={(e) => handleUpdate(item.id, "title", e.target.value)}
                                         />
                                         <Textarea

@@ -1,55 +1,69 @@
-# 🦁 Lions' Minute Master
+# Lions' AI Secretary 🦁
 
-An AI-powered automated secretary for Lions Club meetings. This application records meetings, identifies speakers, and automatically generates official minutes in the standard Lions Club 3-column format.
+![Lions Club Logo](/public/lions-icon.png)
 
-## 🚀 Getting Started
+**Lions' AI Secretary** is a powerful, automated minutes-taking application designed specifically for the **Lions Club of KL Vision City**. It drastically reduces the administrative burden on the club secretary by transforming raw meeting audio recordings into structured, formal minutes in seconds.
 
-### 1. Prerequisites
-- Node.js 18+
-- [Convex Account](https://convex.dev) (for Backend/DB)
-- Gladia API Key (for Audio Intelligence)
-- Gemini API Key (for LLM Extraction)
+Built with **Next.js**, **Convex**, and cutting-edge AI (**Llama 3 via Groq** + **Gladia**).
 
-### 2. Installation
+## 🚀 Features
+
+-   **🎙️ Automated Transcription**: Upload your meeting recording (MP3/WAV/M4A), and our robust AI pipeline transcribes it with speaker identification.
+-   **🤖 AI Minute Generation**: The system intelligently parses the transcript, ignores small talk, captures motions/proposals, and formats them into a formal Meeting Minutes table.
+-   **📂 Smart Organization**: Group meetings by Year or Folder to keep your historical records tidy.
+-   **👥 Attendance Tracking**: Manage your Club Member roster and easily check off attendees for each meeting. The exported document automatically lists all names present.
+-   **📄 Instant Export**: One-click download of a professionally formatted `.docx` file, ready to be emailed to members.
+-   **📝 Context-Aware**: You can input the Meeting Agenda beforehand to guide the AI in structuring the minutes correctly.
+
+## 🛠️ Setup & Installation
+
+### Prerequisites
+-   Node.js 18+
+-   npm or yarn
+-   A [Convex](https://convex.dev) account.
+-   A [Groq](https://groq.com) API Key (for LLM).
+-   A [Gladia](https://gladia.io) API Key (for Transcription).
+
+### 1. Clone & Install
 ```bash
+git clone https://github.com/YourUsername/ai-secretary.git
+cd ai-secretary
 npm install
 ```
 
-### 3. Setup Environment
-Create a `.env.local` file (optional for UI demo, required for full functionality):
-```env
-# Convex
-CONVEX_DEPLOYMENT=...
-NEXT_PUBLIC_CONVEX_URL=...
+### 2. Configure Environment
+1.  Initialize Convex:
+    ```bash
+    npx convex dev
+    ```
+    This will prompt you to log in and create a project.
 
-# AI Services (Add these to your Convex Dashboard Environment Variables)
-GLADIA_API_KEY=...
-GEMINI_API_KEY=...
-```
+2.  Set up Environment Variables in your **Convex Dashboard**:
+    -   Go to `Settings > Environment Variables`.
+    -   Add `GLADIA_API_KEY`: Your Gladia Key.
+    -   Add `GROQ_API_KEY`: Your Groq Key.
 
-### 4. Initialize Backend (Convex)
-```bash
-npx convex dev
-```
-*Note: This will prompt you to log in and will generate the necessary type definitions in `convex/_generated`. Without this, the backend files will show type errors.*
-
-### 5. Run Development Server
+### 3. Run Locally
 ```bash
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) to see the application.
+Open [http://localhost:3000](http://localhost:3000) to check it out.
+
+## 📖 How to Use
+
+1.  **Create a Meeting**: Click "New Meeting" on the dashboard.
+2.  **Add Context**: (Optional) Paste your Agenda in the "Agenda & Context" box.
+3.  **Mark Attendance**: Check the boxes for members who are present.
+4.  **Upload Audio**: Drag & drop your recording file.
+5.  **Wait**:
+    -   Status will go from `UPLOADING` -> `PROCESSING_AUDIO` -> `PROCESSING_LLM`.
+    -   This usually takes 30-60 seconds for a 1-hour meeting (thanks to Groq!).
+6.  **Review & Export**: Once status is `READY_FOR_REVIEW`, read the minutes on screen. If satisfied, click **"Export DOCX"**.
 
 ## 🏗️ Architecture
-- **Frontend**: Next.js 14, Tailwind CSS, Shadcn UI
-- **Backend**: Convex (Database, Serverless Functions, Storage)
-- **AI**: Gladia (Diarization), Gemini 2.5 (Structure Extraction)
 
-## 🦁 Feature Set (V1)
-- **Dashboard**: View past meetings and statuses.
-- **Recorder**: Big Red Button interface with live visualizer.
-- **Minutes Editor**: Split-pane view (Transcript vs Minutes) for rapid review.
-- **Export**: Generates `.docx` files formatted for club records.
+For a deep dive into the code structure, database schema, and AI pipeline, please read [TECHNICAL.md](./TECHNICAL.md).
 
-## ⚠️ Vibe Coding Notes
-This project is currently scaffolded with **Mock Data** in the UI components to demonstrate the UX flow without needing active backend connections. 
-- To connect the real backend, uncomment the `useQuery` hooks in `app/page.tsx` and implementation in `convex/meetings.ts`.
+## 🛡️ License
+
+Private project for Lions Club of KL Vision City.
