@@ -11,6 +11,13 @@ import { useState } from "react";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import Image from "next/image";
 
+/**
+ * Render the main Dashboard UI for managing meetings, folders, and related actions.
+ *
+ * Wires data queries and mutations, local UI state, and action handlers used by the dashboard, and renders header, action controls, folder-based and year-based meeting groupings, settings, and edit dialogs.
+ *
+ * @returns The rendered dashboard JSX element containing header, actions, folder/year groupings, settings dialog, and the edit meeting dialog when active.
+ */
 export default function Dashboard() {
   const router = useRouter();
   // TODO: Replace "mock-user-1" with real auth ID when Clerk/Auth is added
@@ -247,7 +254,15 @@ export default function Dashboard() {
   );
 }
 
-// Extracted Card Component for cleaner code
+/**
+ * Renders a meeting card that displays title, date, venue, status badge, a short status description, and actions for editing, deleting, or opening the meeting.
+ *
+ * @param meeting - Object containing meeting data used to populate the card (expected fields: _id, title, date, venue, status).
+ * @param router - Router object with a `push` method for navigating to the meeting view.
+ * @param handleEdit - Event handler invoked when the edit action is triggered; receives the event and the meeting object.
+ * @param handleDelete - Event handler invoked when the delete action is triggered; receives the event and the meeting `_id`.
+ * @returns A React element representing the meeting card.
+ */
 function MeetingCard({ meeting, router, handleEdit, handleDelete }: any) {
   return (
     <Card className="hover:shadow-md transition-shadow border-slate-200 group relative">
@@ -300,6 +315,14 @@ function MeetingCard({ meeting, router, handleEdit, handleDelete }: any) {
   )
 }
 
+/**
+ * Renders a small status badge whose label and visual style correspond to the provided meeting status.
+ *
+ * The component recognizes common status keys (e.g., `FINALIZED`, `READY_FOR_REVIEW`, `RECORDING`, `PROCESSING`, `PROCESSING_STT`, `PROCESSING_LLM`, `FAILED`) and maps them to user-facing labels and styles; unknown statuses use the raw `status` string as the label and a default processing style.
+ *
+ * @param status - The status key for the meeting; determines the badge label and color
+ * @returns A JSX `span` element containing the styled status badge
+ */
 function BadgeStatus({ status }: { status: string }) {
   const styles: Record<string, string> = {
     FINALIZED: "bg-green-100 text-green-700 border-green-200",
@@ -330,6 +353,17 @@ function BadgeStatus({ status }: { status: string }) {
   );
 }
 
+/**
+ * Renders a modal dialog to edit a meeting's title, venue, and folder assignment.
+ *
+ * Allows updating the meeting's basic metadata and either saving changes or cancelling.
+ *
+ * @param meeting - The meeting being edited; must include `_id`, `title`, `venue`, and optional `folderId`.
+ * @param folders - Array of folder objects available for assignment; each should include `_id` and `name`.
+ * @param onClose - Callback invoked when the dialog is dismissed without saving.
+ * @param onSave - Callback invoked when the user saves changes. Called as `onSave(meetingId, title, venue, folderId)`. Use an empty string for `folderId` to mark the meeting as uncategorized.
+ * @returns The edit meeting modal as a JSX element.
+ */
 function EditMeetingDialog({ meeting, folders, onClose, onSave }: any) {
   const [title, setTitle] = useState(meeting.title);
   const [venue, setVenue] = useState(meeting.venue);
