@@ -1,6 +1,11 @@
 # Lions' AI Secretary 🦁
 
 ![Lions Club Logo](/public/lions-icon.png)
+<img width="1661" height="909" alt="image" src="https://github.com/user-attachments/assets/22ff123a-a401-4b99-8f5a-35b5b6598728" />
+<img width="1590" height="911" alt="image" src="https://github.com/user-attachments/assets/cc707990-d621-4c91-bd5e-9a39ad4120f7" />
+<img width="1744" height="907" alt="image" src="https://github.com/user-attachments/assets/2390906e-7e42-45f2-81dd-942613e9595a" />
+
+
 
 **Lions' AI Secretary** is a powerful, automated minutes-taking application designed specifically for the **Lions Club of KL Vision City**. It drastically reduces the administrative burden on the club secretary by transforming raw meeting audio recordings into structured, formal minutes in seconds.
 
