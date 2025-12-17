@@ -8,6 +8,12 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
+/**
+ * Renders a recorder UI that captures microphone audio, uploads the recording, and attaches it to the specified meeting.
+ *
+ * @param meetingId - The meeting identifier to associate the uploaded audio with
+ * @returns The MeetingRecorder React element
+ */
 export function MeetingRecorder({ meetingId }: { meetingId: Id<"meetings"> }) {
     const [isRecording, setIsRecording] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
