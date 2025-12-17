@@ -11,6 +11,13 @@ import { useState } from "react";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import Image from "next/image";
 
+/**
+ * Render the main Dashboard UI for managing meetings, folders, and related actions.
+ *
+ * Wires data queries and mutations, local UI state, and action handlers used by the dashboard, and renders header, action controls, folder-based and year-based meeting groupings, settings, and edit dialogs.
+ *
+ * @returns The rendered dashboard JSX element containing header, actions, folder/year groupings, settings dialog, and the edit meeting dialog when active.
+ */
 export default function Dashboard() {
   const router = useRouter();
   // TODO: Replace "mock-user-1" with real auth ID when Clerk/Auth is added
@@ -24,42 +31,57 @@ export default function Dashboard() {
   const createFolder = useMutation(api.meetings.createFolder);
   const deleteFolder = useMutation(api.meetings.deleteFolder);
 
-  const [isCreating, setIsCreating] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  const handleCreateMeeting = async () => {
+  // Custom Dialog States
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [isCreateMeetingOpen, setIsCreateMeetingOpen] = useState(false);
+
+  const [confirmConfig, setConfirmConfig] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void }>({
+    isOpen: false, title: "", message: "", onConfirm: () => { }
+  });
+
+  const handleCreateMeetingClick = () => setIsCreateMeetingOpen(true);
+
+  const handleCreateMeetingSubmit = async (title: string, venue: string, folderId: string) => {
     try {
-      setIsCreating(true);
+      // setIsCreating(true); // Dialog handles its own loading state usually
       const meetingId = await createMeeting({
-        title: "New Monthly Meeting",
-        venue: "Vision City Hotel",
+        title,
+        venue,
         userId: "mock-user-1",
+        folderId: folderId ? folderId as Id<"folders"> : undefined
       });
       router.push(`/meeting/${meetingId}`);
     } catch (error) {
       console.error("Failed to create meeting:", error);
-      setIsCreating(false);
     }
   };
 
-  const handleCreateFolder = async () => {
-    const name = prompt("Enter folder name (e.g., 'AGM 2025'):");
-    if (!name) return;
+  const handleCreateFolderClick = () => setIsCreateFolderOpen(true);
+
+  const handleCreateFolderSubmit = async (name: string) => {
     await createFolder({ name, userId: "mock-user-1" });
-  }
+  };
 
-  const handleDeleteFolder = async (folderId: Id<"folders">) => {
-    if (confirm("Delete this folder? Meetings inside will be unclaimed.")) {
-      await deleteFolder({ folderId });
-    }
-  }
+  const handleDeleteFolder = (folderId: Id<"folders">) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: "Delete Folder?",
+      message: "Meetings inside will be unclaimed (uncategorized).",
+      onConfirm: async () => await deleteFolder({ folderId })
+    });
+  };
 
-  const handleDelete = async (e: React.MouseEvent, id: Id<"meetings">) => {
+  const handleDelete = (e: React.MouseEvent, id: Id<"meetings">) => {
     e.stopPropagation();
-    if (confirm("Are you sure you want to delete this meeting?")) {
-      await deleteMeeting({ meetingId: id });
-    }
+    setConfirmConfig({
+      isOpen: true,
+      title: "Delete Meeting?",
+      message: "This action cannot be undone.",
+      onConfirm: async () => await deleteMeeting({ meetingId: id })
+    });
   };
 
   const handleEdit = (e: React.MouseEvent, meeting: any) => {
@@ -148,7 +170,7 @@ export default function Dashboard() {
             <div className="flex gap-2">
               <Button
                 size="lg"
-                onClick={handleCreateFolder}
+                onClick={handleCreateFolderClick}
                 className="rounded-full shadow-lg gap-2 bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 transition-all font-semibold"
               >
                 <Plus className="h-5 w-5" />
@@ -156,11 +178,10 @@ export default function Dashboard() {
               </Button>
               <Button
                 size="lg"
-                onClick={handleCreateMeeting}
-                disabled={isCreating}
+                onClick={handleCreateMeetingClick}
                 className="rounded-full shadow-lg gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/90 transition-all font-semibold"
               >
-                {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
+                <Plus className="h-5 w-5" />
                 New Meeting
               </Button>
             </div>
@@ -233,6 +254,27 @@ export default function Dashboard() {
           onClose={() => setIsSettingsOpen(false)}
         />
 
+        <CreateFolderDialog
+          isOpen={isCreateFolderOpen}
+          onClose={() => setIsCreateFolderOpen(false)}
+          onCreate={handleCreateFolderSubmit}
+        />
+
+        <CreateMeetingDialog
+          isOpen={isCreateMeetingOpen}
+          onClose={() => setIsCreateMeetingOpen(false)}
+          onCreate={handleCreateMeetingSubmit}
+          folders={folders || []}
+        />
+
+        <ConfirmDialog
+          isOpen={confirmConfig.isOpen}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          onConfirm={confirmConfig.onConfirm}
+          onClose={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+        />
+
         {/* Edit Dialog */}
         {editingMeeting && (
           <EditMeetingDialog
@@ -247,7 +289,15 @@ export default function Dashboard() {
   );
 }
 
-// Extracted Card Component for cleaner code
+/**
+ * Renders a meeting card that displays title, date, venue, status badge, a short status description, and actions for editing, deleting, or opening the meeting.
+ *
+ * @param meeting - Object containing meeting data used to populate the card (expected fields: _id, title, date, venue, status).
+ * @param router - Router object with a `push` method for navigating to the meeting view.
+ * @param handleEdit - Event handler invoked when the edit action is triggered; receives the event and the meeting object.
+ * @param handleDelete - Event handler invoked when the delete action is triggered; receives the event and the meeting `_id`.
+ * @returns A React element representing the meeting card.
+ */
 function MeetingCard({ meeting, router, handleEdit, handleDelete }: any) {
   return (
     <Card className="hover:shadow-md transition-shadow border-slate-200 group relative">
@@ -300,6 +350,14 @@ function MeetingCard({ meeting, router, handleEdit, handleDelete }: any) {
   )
 }
 
+/**
+ * Renders a small status badge whose label and visual style correspond to the provided meeting status.
+ *
+ * The component recognizes common status keys (e.g., `FINALIZED`, `READY_FOR_REVIEW`, `RECORDING`, `PROCESSING`, `PROCESSING_STT`, `PROCESSING_LLM`, `FAILED`) and maps them to user-facing labels and styles; unknown statuses use the raw `status` string as the label and a default processing style.
+ *
+ * @param status - The status key for the meeting; determines the badge label and color
+ * @returns A JSX `span` element containing the styled status badge
+ */
 function BadgeStatus({ status }: { status: string }) {
   const styles: Record<string, string> = {
     FINALIZED: "bg-green-100 text-green-700 border-green-200",
@@ -330,6 +388,17 @@ function BadgeStatus({ status }: { status: string }) {
   );
 }
 
+/**
+ * Renders a modal dialog to edit a meeting's title, venue, and folder assignment.
+ *
+ * Allows updating the meeting's basic metadata and either saving changes or cancelling.
+ *
+ * @param meeting - The meeting being edited; must include `_id`, `title`, `venue`, and optional `folderId`.
+ * @param folders - Array of folder objects available for assignment; each should include `_id` and `name`.
+ * @param onClose - Callback invoked when the dialog is dismissed without saving.
+ * @param onSave - Callback invoked when the user saves changes. Called as `onSave(meetingId, title, venue, folderId)`. Use an empty string for `folderId` to mark the meeting as uncategorized.
+ * @returns The edit meeting modal as a JSX element.
+ */
 function EditMeetingDialog({ meeting, folders, onClose, onSave }: any) {
   const [title, setTitle] = useState(meeting.title);
   const [venue, setVenue] = useState(meeting.venue);
@@ -375,6 +444,136 @@ function EditMeetingDialog({ meeting, folders, onClose, onSave }: any) {
         <div className="flex justify-end gap-2 mt-6">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button onClick={() => onSave(meeting._id, title, venue, folderId)}>Save Changes</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreateFolderDialog({ isOpen, onClose, onCreate }: { isOpen: boolean; onClose: () => void; onCreate: (name: string) => Promise<void> }) {
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+
+    setLoading(true);
+    await onCreate(name);
+    setLoading(false);
+    setName("");
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 animate-in fade-in zoom-in duration-200">
+        <h3 className="text-lg font-bold mb-4">Create New Folder</h3>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Folder Name</label>
+            <input
+              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              placeholder="e.g. AGM 2025"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>Cancel</Button>
+            <Button type="submit" disabled={loading || !name.trim()}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Folder"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
+function CreateMeetingDialog({ isOpen, onClose, onCreate, folders }: { isOpen: boolean; onClose: () => void; onCreate: (title: string, venue: string, folderId: string) => Promise<void>; folders: any[] }) {
+  const [title, setTitle] = useState("New Monthly Meeting");
+  const [venue, setVenue] = useState("Vision City Hotel");
+  const [folderId, setFolderId] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !venue.trim()) return;
+
+    setLoading(true);
+    await onCreate(title, venue, folderId);
+    setLoading(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
+        <h3 className="text-lg font-bold mb-4">Create New Meeting</h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Meeting Title</label>
+            <input
+              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              placeholder="e.g. Board Meeting Oct 2025"
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Venue</label>
+            <input
+              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              placeholder="e.g. Conference Room A"
+              value={venue}
+              onChange={(e) => setVenue(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Folder (Optional)</label>
+            <select
+              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
+              value={folderId}
+              onChange={(e) => setFolderId(e.target.value)}
+            >
+              <option value="">Uncategorized</option>
+              {folders?.map((f: any) => (
+                <option key={f._id} value={f._id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-6">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>Cancel</Button>
+            <Button type="submit" disabled={loading || !title.trim() || !venue.trim()}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Start Recording"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDialog({ isOpen, onClose, title, message, onConfirm }: { isOpen: boolean; onClose: () => void; title: string; message: string; onConfirm: () => void }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 animate-in fade-in zoom-in duration-200">
+        <h3 className="text-lg font-bold mb-2">{title}</h3>
+        <p className="text-slate-600 mb-6">{message}</p>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={() => { onConfirm(); onClose(); }}>Confirm</Button>
         </div>
       </div>
     </div>

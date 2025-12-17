@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Trash, Plus, User, Activity } from "lucide-react";
 import { Id } from "../convex/_generated/dataModel";
 
+/**
+ * Render a full-screen modal containing application settings (System Status and Club Members) when open.
+ *
+ * @param isOpen - Controls whether the modal is visible.
+ * @param onClose - Callback invoked when the Close button is pressed.
+ * @returns The settings dialog element when `isOpen` is true, `null` otherwise.
+ */
 export function SettingsDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     if (!isOpen) return null;
 
@@ -28,6 +35,14 @@ export function SettingsDialog({ isOpen, onClose }: { isOpen: boolean; onClose: 
     );
 }
 
+/**
+ * Displays a system status panel with a control to trigger testing of API connections.
+ *
+ * Renders a header with a "Test API Connections" button and, when test results are available,
+ * two status panels showing Gladia (Speech-to-Text) and Gemini (AI Minutes) messages and pass/fail styling.
+ *
+ * @returns The component's rendered JSX: a header with the test control and per-service status panels when present.
+ */
 function ConnectionTester() {
     const testConnection = useAction(api.actions.testApiConnections);
     const [status, setStatus] = useState<any>(null);
@@ -62,16 +77,39 @@ function ConnectionTester() {
                         <div className="font-bold mb-1">Gladia (Speech-to-Text)</div>
                         <div className="text-xs">{status.gladia.message}</div>
                     </div>
-                    <div className={`p-3 rounded border ${status.gemini.status === 'ok' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-                        <div className="font-bold mb-1">Gemini (AI Minutes)</div>
-                        <div className="text-xs">{status.gemini.message}</div>
+                    <div className={`p-3 rounded border ${status.groq.status === 'ok' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                        <div className="font-bold mb-1">Groq (AI Minutes)</div>
+                        <div className="text-xs">{status.groq.message}</div>
                     </div>
+                </div>
+            )}
+
+            {status?.debug && (!status.debug.hasGladia || !status.debug.hasGroq) && (
+                <div className="mt-4 p-3 bg-yellow-50 text-yellow-800 text-xs rounded border border-yellow-200 font-mono">
+                    <div className="font-bold mb-1">Debug Info (Server Environment)</div>
+                    <div>Gladia Key Present: {status.debug.hasGladia ? "Yes" : "NO"}</div>
+                    <div>Groq Key Present: {status.debug.hasGroq ? "Yes" : "NO"}</div>
+                    <div className="mt-2">
+                        Available Keys: {status.debug.envKeys.join(", ") || "None"}
+                    </div>
+                    <p className="mt-2 text-slate-500 italic">
+                        Note: For Vercel deployments, ensure these are set in the
+                        <strong> Production</strong> environment in the Convex Dashboard.
+                    </p>
                 </div>
             )}
         </div>
     )
 }
 
+/**
+ * Manage the club's member roster with UI for viewing, adding, and removing members.
+ *
+ * Fetches and displays current members, provides a form to add a new member (name and role),
+ * and allows removing a member after user confirmation.
+ *
+ * @returns A React element rendering the members manager interface.
+ */
 function MembersManager() {
     const members = useQuery(api.meetings.getMembers);
     const createMember = useMutation(api.meetings.createMember);

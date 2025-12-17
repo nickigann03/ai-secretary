@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Save, Download, FileText, CheckCircle, Loader2 } from "lucide-react";
-import { useAction, useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -16,7 +16,20 @@ export interface MinutesEditorProps {
     initialMinutes: { item: string; description: string; remark: string }[];
 }
 
+/**
+ * Render a minutes editor paired with a transcript viewer, including save and DOCX export controls for a meeting.
+ *
+ * The component displays the provided transcript, allows editing of minutes (item, title, description, remark),
+ * persists edits to the backend with status "READY_FOR_REVIEW", and can request a DOCX export which is downloaded by the client.
+ *
+ * @param meetingId - Identifier of the meeting whose minutes are being edited.
+ * @param transcript - Array of transcript lines to display on the left pane; each line should include `speaker`, `text`, and `time`.
+ * @param initialMinutes - Initial minutes entries to populate the editor; each entry should include `item`, `description`, and `remark`.
+ * @returns A React element containing the transcript pane and editable minutes editor with save and export controls.
+ */
 export function MinutesEditor({ meetingId, transcript, initialMinutes }: MinutesEditorProps) {
+    const meeting = useQuery(api.meetings.getMeeting, { meetingId });
+
     const [minutes, setMinutes] = useState(initialMinutes.map((m, i) => ({
         id: i,
         item: m.item,
@@ -25,6 +38,9 @@ export function MinutesEditor({ meetingId, transcript, initialMinutes }: Minutes
         remark: m.remark
     })));
     const [isExporting, setIsExporting] = useState(false);
+    const [statusDialog, setStatusDialog] = useState<{ isOpen: boolean, title: string, message: string }>({
+        isOpen: false, title: "", message: ""
+    });
 
     const updateMinutes = useMutation(api.meetings.updateMinutes);
     const exportMinutes = useAction(api.actions.exportMinutes);
@@ -33,7 +49,7 @@ export function MinutesEditor({ meetingId, transcript, initialMinutes }: Minutes
         setMinutes(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
     };
 
-    const handleSave = async () => {
+    const saveData = async () => {
         // Map UI state back to schema
         const schemaMinutes = minutes.map(m => ({
             item: m.item,
@@ -46,14 +62,18 @@ export function MinutesEditor({ meetingId, transcript, initialMinutes }: Minutes
             minutes: schemaMinutes,
             status: "READY_FOR_REVIEW" // Keep in review or move to finalized?
         });
-        alert("Draft Saved!");
+    };
+
+    const handleSaveClick = async () => {
+        await saveData();
+        setStatusDialog({ isOpen: true, title: "Draft Saved", message: "Meeting minutes have been updated successfully." });
     };
 
     const handleExport = async () => {
         setIsExporting(true);
         try {
-            // First save recent changes
-            await handleSave();
+            // First save recent changes (silent)
+            await saveData();
 
             // Call backend to generate DOCX
             const base64 = await exportMinutes({ meetingId });
@@ -70,9 +90,11 @@ export function MinutesEditor({ meetingId, transcript, initialMinutes }: Minutes
             link.download = `Lions_Minutes_${new Date().toISOString().slice(0, 10)}.docx`;
             link.click();
 
+            setStatusDialog({ isOpen: true, title: "Export Complete", message: "Your minutes document has been downloaded." });
+
         } catch (error) {
             console.error("Export failed", error);
-            alert("Failed to export.");
+            setStatusDialog({ isOpen: true, title: "Export Failed", message: "Could not generate or download the document." });
         } finally {
             setIsExporting(false);
         }
@@ -82,10 +104,15 @@ export function MinutesEditor({ meetingId, transcript, initialMinutes }: Minutes
         <div className="flex h-[calc(100vh-100px)] gap-6">
             {/* Left Pane: Transcript Scanner */}
             <div className="w-1/3 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b bg-slate-50">
+                <div className="p-4 border-b bg-slate-50 space-y-3">
                     <h3 className="font-semibold text-slate-700 flex items-center gap-2">
                         <FileText className="h-4 w-4" /> Transcript Source
                     </h3>
+                    {meeting?.audioFileUrl && (
+                        <div className="bg-slate-100 p-2 rounded-md">
+                            <audio src={meeting.audioFileUrl} controls className="w-full h-8" />
+                        </div>
+                    )}
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {transcript.map((line, idx) => (
@@ -105,7 +132,7 @@ export function MinutesEditor({ meetingId, transcript, initialMinutes }: Minutes
                 <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
                     <h3 className="font-semibold text-slate-700">Lions Club Minutes Template</h3>
                     <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="gap-2" onClick={handleSave}>
+                        <Button variant="outline" size="sm" className="gap-2" onClick={handleSaveClick}>
                             <Save className="h-4 w-4" /> Save Draft
                         </Button>
                         <Button size="sm" className="gap-2 bg-green-600 hover:bg-green-700 text-white" onClick={handleExport} disabled={isExporting}>
@@ -165,6 +192,32 @@ export function MinutesEditor({ meetingId, transcript, initialMinutes }: Minutes
                             </Card>
                         ))}
                     </div>
+                </div>
+            </div>
+
+            <StatusDialog
+                isOpen={statusDialog.isOpen}
+                title={statusDialog.title}
+                message={statusDialog.message}
+                onClose={() => setStatusDialog(prev => ({ ...prev, isOpen: false }))}
+            />
+        </div>
+    );
+}
+
+function StatusDialog({ isOpen, onClose, title, message }: { isOpen: boolean; onClose: () => void; title: string; message: string }) {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 animate-in fade-in zoom-in duration-200">
+                <div className="flex flex-col items-center text-center">
+                    <div className="bg-green-100 p-3 rounded-full mb-4">
+                        <CheckCircle className="h-8 w-8 text-green-600" />
+                    </div>
+                    <h3 className="text-lg font-bold mb-2 text-slate-800">{title}</h3>
+                    <p className="text-slate-600 mb-6">{message}</p>
+                    <Button className="w-full" onClick={onClose}>OK</Button>
                 </div>
             </div>
         </div>
