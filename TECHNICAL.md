@@ -1,93 +1,286 @@
-# TECHNICAL.md - Lions' AI Secretary
+# 🔧 Technical Documentation
 
-## System Architecture
+> Architecture and flow diagrams for Lions' Club AI Secretary
 
-The Lion's AI Secretary is built on a modern, serverless architecture leveraging **Convex** for the backend and database, and **Next.js 14** (App Router) for the frontend. It integrates deeply with advanced AI services (**Groq/Llama 3** and **Gladia**) to automate the transcription and meaningful summarization of audio recordings.
+---
 
-### Tech Stack
+## 📐 System Architecture
 
-#### Core Framework
--   **Frontend**: Next.js 14 (React, TypeScript) with Tailwind CSS for styling.
--   **Backend**: Convex (BaaS) - Provides real-time database, serverless functions (queries/mutations/actions), and file storage.
--   **Language**: TypeScript throughout the entire stack for end-to-end type safety.
+```mermaid
+flowchart TB
+    subgraph Frontend["Frontend (Next.js 14)"]
+        DASH[Dashboard Page]
+        MR[Meeting Recorder]
+        ME[Minutes Editor]
+        SD[Settings Dialog]
+        API_CLIENT[Convex React Client]
+    end
 
-#### AI & Processing Pipeline
-1.  **Audio Transcription**: **Gladia API**.
-    -   We use Gladia's V2 transcription endpoint for high-fidelity speech-to-text.
-    -   Features enabled: Speaker Diarization (identifying who spoke), timestamp alignment.
-2.  **Minutes Generation**: **Groq API** (Llama 3.3-70b-Versatile).
-    -   The raw transcript is fed into Meta's Llama 3 model running on Groq's LPU (Language Processing Unit) infrastructure.
-    -   We prompt the model to act as a professional secretary, converting informal speech into structured, formal minute items (Item No, Description, Action By).
-3.  **Document Generation**: **docx** (JS Library).
-    -   Minutes are programmatically converted into a downloadable `.docx` file in the browser using the server-side generated data.
+    subgraph Backend["Backend (Convex)"]
+        ACT[server/actions.ts]
+        MUT[server/mutations.ts]
+        QRY[server/queries.ts]
+        SCH[Database Schema]
+        STO[File Storage]
+        CRON[Cron Jobs]
+    end
 
-### Database Schema (Convex)
+    subgraph External["External APIs"]
+        GLADIA[Gladia API<br/>(Speech-to-Text)]
+        GROQ[Groq API<br/>(LLM / Llama 3)]
+    end
 
-The database is schema-enforced via `convex/schema.ts`.
+    subgraph DB["Convex Database"]
+        MEETINGS[(Meetings Table)]
+        FOLDERS[(Folders Table)]
+        MEMBERS[(Members Table)]
+    end
 
-**`meetings` Table**
--   `_id`: Unique Identifier.
--   `title`: Meeting Title (String).
--   `date`: Meeting Date (String/ISO).
--   `venue`: Location (String).
--   `folderId`: Link to `folders` table (Optional).
--   `audioFileId`: Reference to Convex File Storage (for the uploaded recording).
--   `status`: Enum (`"UPLOADING"`, `"PROCESSING_AUDIO"`, `"PROCESSING_LLM"`, `"READY_FOR_REVIEW"`, `"COMPLETED"`, `"FAILED"`).
--   `transcript`: Array of objects `{ speaker, text, time }`.
--   `rawTranscript`: Unformatted raw text dump (for debugging/re-processing).
--   `finalMinutes`: JSON Structure of the generated minutes `{ item, description, remark }`.
--   `attendance`: Array of Member IDs (References to `members` table).
+    DASH --> |Queries| QRY
+    DASH --> |Mutations| MUT
+    MR --> |Mutations| MUT
+    MR --> |File Upload| STO
+    ME --> |Queries| QRY
+    ME --> |Actions| ACT
 
-**`members` Table**
--   `_id`: Unique Identifier.
--   `name`: Member Name (String).
--   `role`: Member Role (e.g., "President", "Secretary").
--   `status`: Active status (Boolean).
+    ACT --> |Fetch| GLADIA
+    ACT --> |Chat| GROQ
+    
+    MUT --> SCH
+    QRY --> SCH
+    SCH --> MEETINGS
+    SCH --> FOLDERS
+    SCH --> MEMBERS
 
-**`folders` Table**
--   `_id`: Unique Identifier.
--   `name`: Folder Name (e.g., "Fiscal Year 2024").
+    ACT --> |Save| MEETINGS
+```
 
-### Key Workflows
+---
 
-#### 1. Audio Upload & Processing
-*   **Trigger**: User uploads a file in `MeetingRecorder.tsx`.
-*   **Action**: `api.meetings.generateUploadUrl` gets a signed URL.
-*   **Mutation**: `api.meetings.saveMeeting` stores the file ID and initial status.
-*   **Action Chain**:
-    1.  `api.actions.processAudio`: Sends audio URL to Gladia.
-    2.  Polls Gladia until completion.
-    3.  Saves transcript to `meetings` table.
-    4.  Triggers `api.actions.generateMinutes`.
+## 🎮 User Flow
 
-#### 2. AI Summarization
-*   **Trigger**: Completion of Audio Processing.
-*   **Action**: `api.actions.generateMinutes`.
-*   **Logic**:
-    1.  Fetches meeting transcript.
-    2.  Constructs a prompt with Meeting Context (Agenda) + Transcript.
-    3.  Sends to Groq (Llama 3.3).
-    4.  Parses JSON response.
-    5.  Updates `meetings` table with `finalMinutes`.
+```mermaid
+flowchart LR
+    subgraph Dashboard["1. Dashboard"]
+        A[View Meetings] --> |Click New| B[Create Meeting]
+        B --> |Input Info| C[Recorder Page]
+    end
+    
+    subgraph Recording["2. Recording Session"]
+        C --> D[Start Record]
+        D --> E[Pause/Resume]
+        E --> F[Stop]
+        F --> G{Review}
+        G --> |Discard| D
+        G --> |Save| H[Process Audio]
+    end
+    
+    subgraph Processing["3. AI Processing"]
+        H --> I[Upload to Convex]
+        I --> J[Trigger Action]
+        J --> K[Gladia Transcribe]
+        K --> L[Groq Generate Minutes]
+        L --> M[Store Results]
+    end
+    
+    subgraph Editing["4. Review & Export"]
+        M --> N[Minutes Editor]
+        N --> O[Listen & Verify]
+        O --> P[Edit Items]
+        P --> Q[Save Draft]
+        Q --> R[Export DOCX]
+    end
+```
 
-#### 3. Export
-*   **Trigger**: User clicks "Export DOCX".
-*   **Action**: Client-side logic calls `api.actions.exportMinutes`.
-*   **Logic**:
-    1.  Generates a Word Document structure using the `docx` library in a Server Action.
-    2.  Populates "Present" list by cross-referencing `attendance` IDs with `members` names.
-    3.  Formats the table with Minute Items.
-    4.  Returns a Base64 string of the file to the client for download.
+---
 
-### Environment Variables
-| Variable | Description |
-| :--- | :--- |
-| `CONVEX_DEPLOYMENT` | Convex Project ID. |
-| `NEXT_PUBLIC_CONVEX_URL` | Public URL for the Convex backend. |
-| `GLADIA_API_KEY` | Key for Gladia Audio Transcription service. |
-| `GROQ_API_KEY` | Key for Groq AI service (Llama 3). |
+## 🤖 Feature: Audio Processing Flow
 
-### Future Improvements / Roadmap
--   [ ] **PDF Export**: Add support for PDF generation alongside DOCX.
--   [ ] **Template injection**: Allow users to upload a `.docx` template and inject variables (`{{date}}`, `{{content}}`) instead of generating a generic table.
--   [ ] **Search**: Vector search on transcripts to find "Who said what?" across all historical meetings.
+```mermaid
+sequenceDiagram
+    participant FE as Frontend (Recorder)
+    participant CX as Convex (Backend)
+    participant ST as Convex Storage
+    participant GL as Gladia (STT)
+    participant GQ as Groq (LLM)
+
+    Note over FE: User stops recording
+    FE->>CX: generateUploadUrl()
+    CX-->>FE: uploadUrl
+    
+    FE->>ST: POST audio/webm blob
+    ST-->>FE: storageId
+    
+    FE->>CX: updateMeetingAudio(storageId)
+    CX->>CX: scheduler.runAfter(0, processAudio)
+    
+    Note over CX: Background Action Starts
+    
+    CX->>ST: getUrl(storageId)
+    ST-->>CX: publicUrl
+    
+    CX->>GL: GET /transcription/?audio_url=...
+    GL-->>CX: { transcription: [...] }
+    
+    CX->>CX: patch(meetingId, { transcript })
+    
+    CX->>GQ: Chat Completion (System Prompt + Transcript)
+    GQ-->>CX: JSON { minutes: [...] }
+    
+    CX->>CX: patch(meetingId, { finalMinutes, status: "READY" })
+```
+
+---
+
+## ⚔️ Template Export System
+
+```mermaid
+flowchart TB
+    subgraph Input["Data Source"]
+        M[Meeting Data]
+        T[Transcript]
+        D[Date/Venue]
+        P[Present Members]
+    end
+    
+    subgraph Template["Template Engine"]
+        DOC[lions-club-minutes-template.docx]
+        ZIP[PizZip]
+        ENG[Docxtemplater]
+    end
+    
+    subgraph Logic["Processing Logic"]
+        READ[Read Template]
+        MAP[Map Data to Tags]
+        RENDER[Render Document]
+        FAIL{Template Exists?}
+    end
+    
+    subgraph Output["Output"]
+        GEN[Generated .docx Blob]
+        FALL[Fallback Manual Generation]
+    end
+    
+    M --> MAP
+    READ --> FAIL
+    FAIL --> |Yes| ZIP
+    FAIL --> |No| FALL
+    
+    ZIP --> ENG
+    MAP --> ENG
+    ENG --> RENDER
+    RENDER --> GEN
+```
+
+---
+
+## 🏗️ Folder Structure
+
+```mermaid
+graph TD
+    ROOT[ai-secretary/]
+    
+    subgraph App["/app (Next.js)"]
+        PAGE[page.tsx<br/>(Dashboard)]
+        MEETING_PAGE[meeting/[id]/page.tsx]
+        LAYOUT[layout.tsx]
+        GLOBALS[globals.css]
+    end
+
+    subgraph Convex["/convex (Backend)"]
+        SCHEMA[schema.ts]
+        ACTIONS[actions.ts]
+        MEETINGS[meetings.ts]
+    end
+
+    subgraph Components["/components"]
+        UI[ui/<br/>(Shadcn Components)]
+        REC[MeetingRecorder.tsx]
+        EDIT[MinutesEditor.tsx]
+        SET[SettingsDialog.tsx]
+    end
+    
+    ROOT --> App
+    ROOT --> Convex
+    ROOT --> Components
+```
+
+---
+
+## 📊 Data Models
+
+```mermaid
+erDiagram
+    MEETINGS {
+        id _id
+        string title
+        string venue
+        number date
+        id folderId
+        string audioFileUrl
+        string status
+        json rawTranscript
+        json finalMinutes
+    }
+    
+    FOLDERS {
+        id _id
+        string name
+        string userId
+    }
+    
+    MEMBERS {
+        id _id
+        string name
+        string role
+        string email
+    }
+    
+    TRANSCRIPT_ITEM {
+        string speaker
+        string text
+        number time
+    }
+    
+    MINUTE_ITEM {
+        string item
+        string description
+        string remark
+    }
+    
+    MEETINGS ||--o{ TRANSCRIPT_ITEM : contains
+    MEETINGS ||--o{ MINUTE_ITEM : produces
+    FOLDERS ||--o{ MEETINGS : organizes
+    MEMBERS ||--o{ MEETINGS : attends
+```
+
+---
+
+## 🔐 Environment Variables
+
+```mermaid
+flowchart TB
+    subgraph Client["Client Side (.env.local)"]
+        C1[NEXT_PUBLIC_CONVEX_URL]
+    end
+    
+    subgraph Server["Convex Dashboard"]
+        S1[GLADIA_API_KEY]
+        S2[GROQ_API_KEY]
+    end
+    
+    subgraph Usage["Usage"]
+        U1[Convex Client Provider]
+        U2[convex/actions.ts]
+    end
+    
+    C1 --> U1
+    S1 --> U2
+    S2 --> U2
+```
+
+---
+
+<p align="center">
+  <b>Built for Lions Club KL Vision City</b>
+</p>

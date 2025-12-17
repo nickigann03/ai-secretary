@@ -62,10 +62,25 @@ function ConnectionTester() {
                         <div className="font-bold mb-1">Gladia (Speech-to-Text)</div>
                         <div className="text-xs">{status.gladia.message}</div>
                     </div>
-                    <div className={`p-3 rounded border ${status.gemini.status === 'ok' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-                        <div className="font-bold mb-1">Gemini (AI Minutes)</div>
-                        <div className="text-xs">{status.gemini.message}</div>
+                    <div className={`p-3 rounded border ${status.groq.status === 'ok' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                        <div className="font-bold mb-1">Groq (AI Minutes)</div>
+                        <div className="text-xs">{status.groq.message}</div>
                     </div>
+                </div>
+            )}
+
+            {status?.debug && (!status.debug.hasGladia || !status.debug.hasGroq) && (
+                <div className="mt-4 p-3 bg-yellow-50 text-yellow-800 text-xs rounded border border-yellow-200 font-mono">
+                    <div className="font-bold mb-1">Debug Info (Server Environment)</div>
+                    <div>Gladia Key Present: {status.debug.hasGladia ? "Yes" : "NO"}</div>
+                    <div>Groq Key Present: {status.debug.hasGroq ? "Yes" : "NO"}</div>
+                    <div className="mt-2">
+                        Available Keys: {status.debug.envKeys.join(", ") || "None"}
+                    </div>
+                    <p className="mt-2 text-slate-500 italic">
+                        Note: For Vercel deployments, ensure these are set in the
+                        <strong> Production</strong> environment in the Convex Dashboard.
+                    </p>
                 </div>
             )}
         </div>

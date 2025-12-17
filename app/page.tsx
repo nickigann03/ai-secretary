@@ -24,42 +24,57 @@ export default function Dashboard() {
   const createFolder = useMutation(api.meetings.createFolder);
   const deleteFolder = useMutation(api.meetings.deleteFolder);
 
-  const [isCreating, setIsCreating] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  const handleCreateMeeting = async () => {
+  // Custom Dialog States
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [isCreateMeetingOpen, setIsCreateMeetingOpen] = useState(false);
+
+  const [confirmConfig, setConfirmConfig] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void }>({
+    isOpen: false, title: "", message: "", onConfirm: () => { }
+  });
+
+  const handleCreateMeetingClick = () => setIsCreateMeetingOpen(true);
+
+  const handleCreateMeetingSubmit = async (title: string, venue: string, folderId: string) => {
     try {
-      setIsCreating(true);
+      // setIsCreating(true); // Dialog handles its own loading state usually
       const meetingId = await createMeeting({
-        title: "New Monthly Meeting",
-        venue: "Vision City Hotel",
+        title,
+        venue,
         userId: "mock-user-1",
+        folderId: folderId ? folderId as Id<"folders"> : undefined
       });
       router.push(`/meeting/${meetingId}`);
     } catch (error) {
       console.error("Failed to create meeting:", error);
-      setIsCreating(false);
     }
   };
 
-  const handleCreateFolder = async () => {
-    const name = prompt("Enter folder name (e.g., 'AGM 2025'):");
-    if (!name) return;
+  const handleCreateFolderClick = () => setIsCreateFolderOpen(true);
+
+  const handleCreateFolderSubmit = async (name: string) => {
     await createFolder({ name, userId: "mock-user-1" });
-  }
+  };
 
-  const handleDeleteFolder = async (folderId: Id<"folders">) => {
-    if (confirm("Delete this folder? Meetings inside will be unclaimed.")) {
-      await deleteFolder({ folderId });
-    }
-  }
+  const handleDeleteFolder = (folderId: Id<"folders">) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: "Delete Folder?",
+      message: "Meetings inside will be unclaimed (uncategorized).",
+      onConfirm: async () => await deleteFolder({ folderId })
+    });
+  };
 
-  const handleDelete = async (e: React.MouseEvent, id: Id<"meetings">) => {
+  const handleDelete = (e: React.MouseEvent, id: Id<"meetings">) => {
     e.stopPropagation();
-    if (confirm("Are you sure you want to delete this meeting?")) {
-      await deleteMeeting({ meetingId: id });
-    }
+    setConfirmConfig({
+      isOpen: true,
+      title: "Delete Meeting?",
+      message: "This action cannot be undone.",
+      onConfirm: async () => await deleteMeeting({ meetingId: id })
+    });
   };
 
   const handleEdit = (e: React.MouseEvent, meeting: any) => {
@@ -148,7 +163,7 @@ export default function Dashboard() {
             <div className="flex gap-2">
               <Button
                 size="lg"
-                onClick={handleCreateFolder}
+                onClick={handleCreateFolderClick}
                 className="rounded-full shadow-lg gap-2 bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 transition-all font-semibold"
               >
                 <Plus className="h-5 w-5" />
@@ -156,11 +171,10 @@ export default function Dashboard() {
               </Button>
               <Button
                 size="lg"
-                onClick={handleCreateMeeting}
-                disabled={isCreating}
+                onClick={handleCreateMeetingClick}
                 className="rounded-full shadow-lg gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/90 transition-all font-semibold"
               >
-                {isCreating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
+                <Plus className="h-5 w-5" />
                 New Meeting
               </Button>
             </div>
@@ -231,6 +245,27 @@ export default function Dashboard() {
         <SettingsDialog
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
+        />
+
+        <CreateFolderDialog
+          isOpen={isCreateFolderOpen}
+          onClose={() => setIsCreateFolderOpen(false)}
+          onCreate={handleCreateFolderSubmit}
+        />
+
+        <CreateMeetingDialog
+          isOpen={isCreateMeetingOpen}
+          onClose={() => setIsCreateMeetingOpen(false)}
+          onCreate={handleCreateMeetingSubmit}
+          folders={folders || []}
+        />
+
+        <ConfirmDialog
+          isOpen={confirmConfig.isOpen}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          onConfirm={confirmConfig.onConfirm}
+          onClose={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
         />
 
         {/* Edit Dialog */}
@@ -375,6 +410,136 @@ function EditMeetingDialog({ meeting, folders, onClose, onSave }: any) {
         <div className="flex justify-end gap-2 mt-6">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button onClick={() => onSave(meeting._id, title, venue, folderId)}>Save Changes</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreateFolderDialog({ isOpen, onClose, onCreate }: { isOpen: boolean; onClose: () => void; onCreate: (name: string) => Promise<void> }) {
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+
+    setLoading(true);
+    await onCreate(name);
+    setLoading(false);
+    setName("");
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 animate-in fade-in zoom-in duration-200">
+        <h3 className="text-lg font-bold mb-4">Create New Folder</h3>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Folder Name</label>
+            <input
+              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              placeholder="e.g. AGM 2025"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>Cancel</Button>
+            <Button type="submit" disabled={loading || !name.trim()}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Folder"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
+function CreateMeetingDialog({ isOpen, onClose, onCreate, folders }: { isOpen: boolean; onClose: () => void; onCreate: (title: string, venue: string, folderId: string) => Promise<void>; folders: any[] }) {
+  const [title, setTitle] = useState("New Monthly Meeting");
+  const [venue, setVenue] = useState("Vision City Hotel");
+  const [folderId, setFolderId] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !venue.trim()) return;
+
+    setLoading(true);
+    await onCreate(title, venue, folderId);
+    setLoading(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
+        <h3 className="text-lg font-bold mb-4">Create New Meeting</h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Meeting Title</label>
+            <input
+              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              placeholder="e.g. Board Meeting Oct 2025"
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Venue</label>
+            <input
+              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              placeholder="e.g. Conference Room A"
+              value={venue}
+              onChange={(e) => setVenue(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Folder (Optional)</label>
+            <select
+              className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
+              value={folderId}
+              onChange={(e) => setFolderId(e.target.value)}
+            >
+              <option value="">Uncategorized</option>
+              {folders?.map((f: any) => (
+                <option key={f._id} value={f._id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-6">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>Cancel</Button>
+            <Button type="submit" disabled={loading || !title.trim() || !venue.trim()}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Start Recording"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDialog({ isOpen, onClose, title, message, onConfirm }: { isOpen: boolean; onClose: () => void; title: string; message: string; onConfirm: () => void }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 animate-in fade-in zoom-in duration-200">
+        <h3 className="text-lg font-bold mb-2">{title}</h3>
+        <p className="text-slate-600 mb-6">{message}</p>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={() => { onConfirm(); onClose(); }}>Confirm</Button>
         </div>
       </div>
     </div>

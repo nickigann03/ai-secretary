@@ -8,6 +8,8 @@ import fs from "fs";
 import path from "path";
 import Groq from "groq-sdk";
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } from "docx";
+import PizZip from "pizzip";
+import Docxtemplater from "docxtemplater";
 
 export const processAudio = action({
     args: { meetingId: v.id("meetings"), audioUrl: v.string() },
@@ -198,25 +200,48 @@ export const exportMinutes = action({
         const presentNames = allMembers
             .filter((m: any) => presentMemberIds.has(m._id))
             .map((m: any) => m.name)
-            .join(", ");
+            .join(", ") || "None recorded";
+
+        // Prepare Data for Template
+        const data = {
+            title: meeting.title,
+            venue: meeting.venue || "TBD",
+            date: new Date(meeting.date).toLocaleDateString(),
+            present: presentNames,
+            minutes: meeting.finalMinutes.map(m => ({
+                item: m.item,
+                description: m.description, // User might want title + description combo
+                remark: m.remark
+            }))
+        };
 
         // Check for User Template
-        const templatePath = path.resolve("./lions-club minutes template.docx");
-        let docBlob;
+        const templatePath = path.resolve("./lions-club-minutes-template.docx");
 
-        // Note: Full template filling requires mapping placeholders (e.g. {{Date}}) which we don't have yet.
-        // For now, we will stick to the robust generation method to ensure output, 
-        // but we verify we can access the file for future patching.
+        try {
+            if (fs.existsSync(templatePath)) {
+                console.log("Using Template at:", templatePath);
+                const content = fs.readFileSync(templatePath, "binary");
+                const zip = new PizZip(content);
+                const doc = new Docxtemplater(zip, {
+                    paragraphLoop: true,
+                    linebreaks: true,
+                });
 
-        /* 
-        // Future Template Logic:
-        if (fs.existsSync(templatePath)) {
-             const templateBuffer = fs.readFileSync(templatePath);
-             // Use PatchDocument here...
-        } 
-        */
+                doc.render(data);
 
-        // Generating a fresh professional document
+                const buf = doc.getZip().generate({
+                    type: "nodebuffer",
+                    compression: "DEFLATE",
+                });
+                return buf.toString("base64");
+            }
+        } catch (e) {
+            console.error("Template processing failed, falling back to auto-gen:", e);
+        }
+
+        console.log("Generating fresh document (No template found or error)...");
+        // Fallback: Generating a fresh professional document
         const doc = new Document({
             sections: [{
                 children: [
@@ -239,7 +264,7 @@ export const exportMinutes = action({
                         spacing: { after: 200 },
                     }),
                     new Paragraph({
-                        text: `Present: ${presentNames || "None recorded"}`,
+                        text: `Present: ${presentNames}`,
                         spacing: { after: 400 },
                     }),
                     // Table Header
@@ -279,11 +304,19 @@ export const testApiConnections = action({
     handler: async (ctx) => {
         const results = {
             gladia: { status: "pending", message: "" },
-            gemini: { status: "pending", message: "" }, // Keeping key name 'gemini' for UI compatibility, but it tests Groq
+            groq: { status: "pending", message: "" },
         };
 
         const gladiaKey = process.env.GLADIA_API_KEY;
         const groqKey = process.env.GROQ_API_KEY;
+
+        // Debug info to return to client (careful not to expose actual values)
+        const debug = {
+            hasGladia: !!gladiaKey,
+            hasGroq: !!groqKey,
+            envKeys: Object.keys(process.env).filter(k => !k.startsWith("CONVEX_")), // Show user defined keys
+        };
+
 
         // 1. Test Gladia
         if (!gladiaKey) {
@@ -303,7 +336,7 @@ export const testApiConnections = action({
 
         // 2. Test Groq
         if (!groqKey) {
-            results.gemini = { status: "error", message: "Missing GROQ_API_KEY" };
+            results.groq = { status: "error", message: "Missing GROQ_API_KEY" };
         } else {
             try {
                 const groq = new Groq({ apiKey: groqKey });
@@ -311,12 +344,12 @@ export const testApiConnections = action({
                     messages: [{ role: "user", content: "Test" }],
                     model: "llama3-8b-8192", // Fast test model
                 });
-                results.gemini = { status: "ok", message: "Connected to Groq (Llama 3)" };
+                results.groq = { status: "ok", message: "Connected to Groq (Llama 3)" };
             } catch (err: any) {
-                results.gemini = { status: "error", message: err.message || "Groq connection failed" };
+                results.groq = { status: "error", message: err.message || "Groq connection failed" };
             }
         }
 
-        return results;
+        return { ...results, debug };
     }
 });
