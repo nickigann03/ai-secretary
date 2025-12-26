@@ -1,13 +1,20 @@
 "use client";
-import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { ReactNode } from "react";
+import { ConvexReactClient } from "convex/react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { ClerkProvider, useAuth } from "@clerk/nextjs";
 
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL || "https://mock-convex-url.convex.cloud";
-
-const convex = new ConvexReactClient(convexUrl);
+const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
-    // If no URL is provided, we still render children but Convex hooks might fail if used.
-    // This is just a placeholder to prevent crash if env var is missing during scaffolding.
-    return <ConvexProvider client={convex}>{children}</ConvexProvider>;
+    return (
+        <ClerkProvider
+            publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+            dynamic
+        >
+            <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+                {children}
+            </ConvexProviderWithClerk>
+        </ClerkProvider>
+    );
 }

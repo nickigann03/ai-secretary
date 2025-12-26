@@ -2,6 +2,16 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { api } from "./_generated/api";
 
+// --- Helper for Auth ---
+async function getUserId(ctx: any) {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+        throw new Error("Unauthenticated call to protected function");
+    }
+    // Using subject as the stable ID from Clerk
+    return identity.subject;
+}
+
 // --- Member Management ---
 
 export const createMember = mutation({
@@ -11,6 +21,8 @@ export const createMember = mutation({
         email: v.optional(v.string())
     },
     handler: async (ctx, args) => {
+        // Members might be shared or per-user? Assuming shared for now for Lions Club context
+        // Or we can add userId here too if members are private.
         return await ctx.db.insert("members", args);
     },
 });
@@ -35,19 +47,20 @@ export const deleteMember = mutation({
 export const createFolder = mutation({
     args: {
         name: v.string(),
-        userId: v.string(),
     },
     handler: async (ctx, args) => {
-        return await ctx.db.insert("folders", args);
+        const userId = await getUserId(ctx);
+        return await ctx.db.insert("folders", { ...args, userId });
     },
 });
 
 export const getFolders = query({
-    args: { userId: v.string() },
-    handler: async (ctx, args) => {
+    args: {},
+    handler: async (ctx) => {
+        const userId = await getUserId(ctx);
         return await ctx.db
             .query("folders")
-            .filter((q) => q.eq(q.field("userId"), args.userId))
+            .filter((q) => q.eq(q.field("userId"), userId))
             .collect();
     },
 });
@@ -55,8 +68,14 @@ export const getFolders = query({
 export const deleteFolder = mutation({
     args: { folderId: v.id("folders") },
     handler: async (ctx, args) => {
-        // Optional: delete or unlink meetings in this folder?
-        // For now, let's just delete the folder. Meetings will become "Uncategorized".
+        const userId = await getUserId(ctx);
+        const folder = await ctx.db.get(args.folderId);
+
+        if (!folder || folder.userId !== userId) {
+            throw new Error("Unauthorized to delete this folder");
+        }
+
+        // Unlink meetings
         const meetings = await ctx.db
             .query("meetings")
             .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
@@ -76,6 +95,13 @@ export const deleteFolder = mutation({
 export const deleteMeeting = mutation({
     args: { meetingId: v.id("meetings") },
     handler: async (ctx, args) => {
+        const userId = await getUserId(ctx);
+        const meeting = await ctx.db.get(args.meetingId);
+
+        if (meeting && meeting.userId !== userId) {
+            throw new Error("Unauthorized");
+        }
+
         await ctx.db.delete(args.meetingId);
     },
 });
@@ -86,6 +112,10 @@ export const updateMeetingStatus = mutation({
         status: v.string(),
     },
     handler: async (ctx, args) => {
+        const userId = await getUserId(ctx);
+        const meeting = await ctx.db.get(args.meetingId);
+        if (meeting && meeting.userId !== userId) throw new Error("Unauthorized");
+
         await ctx.db.patch(args.meetingId, { status: args.status });
     },
 });
@@ -101,6 +131,10 @@ export const updateMeetingDetails = mutation({
         folderId: v.optional(v.id("folders")),
     },
     handler: async (ctx, args) => {
+        const userId = await getUserId(ctx);
+        const meeting = await ctx.db.get(args.meetingId);
+        if (meeting && meeting.userId !== userId) throw new Error("Unauthorized");
+
         const { meetingId, ...fields } = args;
         await ctx.db.patch(meetingId, fields);
     },
@@ -112,15 +146,15 @@ export const createMeeting = mutation({
     args: {
         title: v.string(),
         venue: v.string(),
-        userId: v.string(), // Mock user ID for now
         folderId: v.optional(v.id("folders")),
     },
     handler: async (ctx, args) => {
+        const userId = await getUserId(ctx);
         const meetingId = await ctx.db.insert("meetings", {
             title: args.title,
             date: Date.now(),
             venue: args.venue,
-            userId: args.userId,
+            userId: userId,
             folderId: args.folderId,
             audioFileUrl: "",
             status: "RECORDING",
@@ -131,11 +165,12 @@ export const createMeeting = mutation({
 });
 
 export const getMeetings = query({
-    args: { userId: v.string() },
-    handler: async (ctx, args) => {
+    args: {},
+    handler: async (ctx) => {
+        const userId = await getUserId(ctx);
         return await ctx.db
             .query("meetings")
-            .filter((q) => q.eq(q.field("userId"), args.userId))
+            .filter((q) => q.eq(q.field("userId"), userId))
             .collect();
     },
 });
@@ -143,13 +178,22 @@ export const getMeetings = query({
 export const getMeeting = query({
     args: { meetingId: v.id("meetings") },
     handler: async (ctx, args) => {
-        return await ctx.db.get(args.meetingId);
+        const userId = await getUserId(ctx);
+        const meeting = await ctx.db.get(args.meetingId);
+
+        if (!meeting) return null;
+        if (meeting.userId !== userId) {
+            return null;
+        }
+
+        return meeting;
     },
 });
 
 export const generateUploadUrl = mutation({
     args: {},
     handler: async (ctx) => {
+        await getUserId(ctx);
         return await ctx.storage.generateUploadUrl();
     },
 });
@@ -157,6 +201,10 @@ export const generateUploadUrl = mutation({
 export const updateMeetingAudio = mutation({
     args: { meetingId: v.id("meetings"), storageId: v.id("_storage") },
     handler: async (ctx, args) => {
+        const userId = await getUserId(ctx);
+        const meeting = await ctx.db.get(args.meetingId);
+        if (meeting && meeting.userId !== userId) throw new Error("Unauthorized");
+
         const url = await ctx.storage.getUrl(args.storageId);
         if (!url) throw new Error("Failed to get download URL");
 
@@ -165,7 +213,6 @@ export const updateMeetingAudio = mutation({
             status: "PROCESSING_STT",
         });
 
-        // Schedule the action to process audio (moved to actions.ts)
         await ctx.scheduler.runAfter(0, api.actions.processAudio, {
             meetingId: args.meetingId,
             audioUrl: url,
@@ -180,6 +227,14 @@ export const updateTranscript = mutation({
         status: v.string()
     },
     handler: async (ctx, args) => {
+        // internal calls check (loose check)
+        const identity = await ctx.auth.getUserIdentity();
+        if (identity) {
+            const userId = identity.subject;
+            const meeting = await ctx.db.get(args.meetingId);
+            if (meeting && meeting.userId !== userId) throw new Error("Unauthorized");
+        }
+
         await ctx.db.patch(args.meetingId, {
             rawTranscript: args.transcript,
             status: args.status,
@@ -194,6 +249,10 @@ export const updateMinutes = mutation({
         status: v.string()
     },
     handler: async (ctx, args) => {
+        const userId = await getUserId(ctx);
+        const meeting = await ctx.db.get(args.meetingId);
+        if (meeting && meeting.userId !== userId) throw new Error("Unauthorized");
+
         await ctx.db.patch(args.meetingId, {
             finalMinutes: args.minutes,
             status: args.status,
