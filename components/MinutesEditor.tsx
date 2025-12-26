@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { Save, Download, FileText, CheckCircle, Loader2 } from "lucide-react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { Save, Download, FileText, CheckCircle, Loader2, CheckSquare } from "lucide-react";
+import { useAction, useMutation, useQuery, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -28,7 +28,8 @@ export interface MinutesEditorProps {
  * @returns A React element containing the transcript pane and editable minutes editor with save and export controls.
  */
 export function MinutesEditor({ meetingId, transcript, initialMinutes }: MinutesEditorProps) {
-    const meeting = useQuery(api.meetings.getMeeting, { meetingId });
+    const { isAuthenticated } = useConvexAuth();
+    const meeting = useQuery(api.meetings.getMeeting, isAuthenticated ? { meetingId } : "skip");
 
     const [minutes, setMinutes] = useState(initialMinutes.map((m, i) => ({
         id: i,
@@ -43,6 +44,7 @@ export function MinutesEditor({ meetingId, transcript, initialMinutes }: Minutes
     });
 
     const updateMinutes = useMutation(api.meetings.updateMinutes);
+    const updateStatus = useMutation(api.meetings.updateMeetingStatus);
     const exportMinutes = useAction(api.actions.exportMinutes);
 
     const handleUpdate = (id: number, field: string, value: string) => {
@@ -138,6 +140,12 @@ export function MinutesEditor({ meetingId, transcript, initialMinutes }: Minutes
                         <Button size="sm" className="gap-2 bg-green-600 hover:bg-green-700 text-white" onClick={handleExport} disabled={isExporting}>
                             {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                             {isExporting ? "Exporting..." : "Export to DOCX"}
+                        </Button>
+                        <Button size="sm" variant="secondary" className="gap-2 border-green-200 bg-green-50 text-green-700 hover:bg-green-100" onClick={async () => {
+                            await updateStatus({ meetingId, status: "FINALIZED" });
+                            setStatusDialog({ isOpen: true, title: "Meeting Finalized", message: "This meeting is now marked as completed." });
+                        }}>
+                            <CheckSquare className="h-4 w-4" /> Mark Completed
                         </Button>
                     </div>
                 </div>

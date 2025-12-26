@@ -25,8 +25,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${outfit.className} antialiased bg-slate-50 text-slate-900`}>
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${outfit.className} antialiased bg-slate-50 text-slate-900`}
+        suppressHydrationWarning
+      >
         <ConvexClientProvider>
           {children}
         </ConvexClientProvider>

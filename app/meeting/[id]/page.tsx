@@ -6,9 +6,10 @@ import { MinutesEditor } from "@/components/MinutesEditor";
 import { Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { useRouter } from "next/navigation";
 
 /**
  * Page component that renders the meeting UI for a given meeting id.
@@ -23,10 +24,26 @@ import { Id } from "@/convex/_generated/dataModel";
 export default function MeetingPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const meetingId = id as Id<"meetings">;
+    const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
+    const router = useRouter();
 
-    const meeting = useQuery(api.meetings.getMeeting, { meetingId });
-    const members = useQuery(api.meetings.getMembers);
+    const meeting = useQuery(api.meetings.getMeeting, isAuthenticated ? { meetingId } : "skip");
+    const members = useQuery(api.meetings.getMembers, isAuthenticated ? {} : "skip");
     const updateMeeting = useMutation(api.meetings.updateMeetingDetails);
+
+    useEffect(() => {
+        if (!isAuthLoading && !isAuthenticated) {
+            router.push("/");
+        }
+    }, [isAuthenticated, isAuthLoading, router]);
+
+    if (isAuthLoading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
 
 
 
