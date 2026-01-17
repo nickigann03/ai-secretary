@@ -198,6 +198,48 @@ export const generateUploadUrl = mutation({
     },
 });
 
+// Save audio only - does not trigger AI processing
+export const saveMeetingAudio = mutation({
+    args: { meetingId: v.id("meetings"), storageId: v.id("_storage") },
+    handler: async (ctx, args) => {
+        const userId = await getUserId(ctx);
+        const meeting = await ctx.db.get(args.meetingId);
+        if (meeting && meeting.userId !== userId) throw new Error("Unauthorized");
+
+        const url = await ctx.storage.getUrl(args.storageId);
+        if (!url) throw new Error("Failed to get download URL");
+
+        await ctx.db.patch(args.meetingId, {
+            audioFileUrl: url,
+            status: "SAVED", // Recording saved but not yet processed
+        });
+
+        return { audioUrl: url };
+    },
+});
+
+// Trigger AI processing for a saved recording
+export const generateMeetingMinutes = mutation({
+    args: { meetingId: v.id("meetings") },
+    handler: async (ctx, args) => {
+        const userId = await getUserId(ctx);
+        const meeting = await ctx.db.get(args.meetingId);
+        if (!meeting) throw new Error("Meeting not found");
+        if (meeting.userId !== userId) throw new Error("Unauthorized");
+        if (!meeting.audioFileUrl) throw new Error("No audio file to process");
+
+        await ctx.db.patch(args.meetingId, {
+            status: "PROCESSING_STT",
+        });
+
+        await ctx.scheduler.runAfter(0, api.actions.processAudio, {
+            meetingId: args.meetingId,
+            audioUrl: meeting.audioFileUrl,
+        });
+    },
+});
+
+// Legacy function for backwards compatibility
 export const updateMeetingAudio = mutation({
     args: { meetingId: v.id("meetings"), storageId: v.id("_storage") },
     handler: async (ctx, args) => {
